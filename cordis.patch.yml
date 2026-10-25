@@ -1,0 +1,4 @@
+- insert:
+    - id: plugin-adoption
+      name: 'dsh-plugin-adoption'
+      config: {}

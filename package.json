@@ -1,0 +1,36 @@
+{
+  "name": "dsh-plugin-adoption",
+  "version": "0.1.0",
+  "description": "DSH 插件：按真实 npm 月下载量给插件排名，而不是按 GitHub 星数；并标出被星数低估的插件",
+  "type": "module",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "discovery",
+    "rankings",
+    "npm",
+    "adoption"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Anguis-L/dsh-plugin-adoption.git"
+  },
+  "homepage": "https://github.com/Anguis-L/dsh-plugin-adoption#readme",
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
