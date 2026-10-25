@@ -23,6 +23,9 @@ dsh plugin --profile <你的profile> add github:Anguis-L/dsh-plugin-adoption
 社区的发现页按 **GitHub star** 排序。但 star 衡量的是一个仓库获得的关注，
 不是实际发生的安装。实测（1024Store catalog × npm 官方下载接口，2026-10-25）：
 
+![demo](assets/demo-zh.png)
+
+
 ```
 按 star 排:    vision-router(1174★) > mnemon(701★) > config-manager(240★)
                > find-plugin(206★) > memento(141★) > mcp-panel(89★)

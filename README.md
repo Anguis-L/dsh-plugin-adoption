@@ -24,6 +24,8 @@ Community discovery surfaces order by **GitHub stars**. But a star measures the
 attention a repository got, not an install that happened. Measured against the
 live catalog on 2026-10-25:
 
+![demo](assets/demo-en.png)
+
 ```
 by stars:     vision-router(1174) > mnemon(701) > config-manager(240)
               > find-plugin(206) > memento(141) > mcp-panel(89) > secure-audit(85)
