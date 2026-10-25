@@ -9,8 +9,10 @@
   "files": [
     "index.js",
     "lib",
+    "test",
     "cordis.patch.yml",
     "README.md",
+    "README.zh.md",
     "LICENSE"
   ],
   "keywords": [

@@ -1,103 +1,129 @@
 # dsh-plugin-adoption
 
-按**真实 npm 月下载量**给 DSH 插件排名，而不是按 GitHub 星数。
+Rank DSH plugins by **real monthly npm downloads** instead of GitHub stars.
 
 [![DSH 1024Store](https://img.shields.io/badge/1024Store-catalogued-blue)](https://deepseek1024.com/)
+[![CI](https://github.com/Anguis-L/dsh-plugin-adoption/actions/workflows/ci.yml/badge.svg)](https://github.com/Anguis-L/dsh-plugin-adoption/actions/workflows/ci.yml)
 
-## 安装
+> 中文说明见 [README.zh.md](README.zh.md)。
 
-**推荐**（这条形式会被 1024Store 计入安装量）：
+## Install
+
+**Recommended** — this form is counted by 1024Store's install analytics:
 
 ```bash
-dsh plugin --profile <你的profile> add github:Anguis-L/dsh-plugin-adoption
+dsh plugin --profile <your-profile> add github:Anguis-L/dsh-plugin-adoption
 ```
 
-当前版本 **v0.1.0**。装完**重启一次** dsh（bundle 层要重启才组装），
-然后在会话里直接让 agent 调用 `plugin_adoption`。
+Version **v0.1.0**. Restart `dsh` once after installing (the bundle layer is
+assembled at startup), then ask the agent to call `plugin_adoption`.
 
-## 为什么需要它
+## Why this exists
 
-社区的发现页按 **GitHub star** 排序。但 star 衡量的是一个仓库获得的关注，
-不是实际发生的安装。实测（1024Store catalog × npm 官方下载接口，2026-10-25）：
-
-```
-按 star 排:    vision-router(1174★) > mnemon(701★) > config-manager(240★)
-               > find-plugin(206★) > memento(141★) > mcp-panel(89★)
-               > secure-audit(85★)
-
-按下载量排:    mnemon(50,672) > vision-router(33,058) > find-plugin(22,038)
-               > config-manager(15,291) > mcp-panel(10,058) > memento(5,966)
-               > secure-audit(2,047)
-```
-
-`dsh-mcp-panel` 按 star 排第 **6**（89★），按下载排第 **4**（10,058 次/月）——
-一个 89 星的插件，实际用的人比 240 星的那个更多。
-
-**星数会说谎，下载量不会。** 这个插件把两个排序并排摆出来，并标出被星数低估的插件。
-
-## 用法
+Community discovery surfaces order by **GitHub stars**. But a star measures the
+attention a repository got, not an install that happened. Measured against the
+live catalog on 2026-10-25:
 
 ```
-plugin_adoption()                                    # 默认：dsh 关键词，12 个候选
-plugin_adoption({ queries: ['memory', 'tool'] })     # 多个搜索词取并集
-plugin_adoption({ limit: 30 })                       # 更多候选（会更慢，且消耗配额）
-plugin_adoption({ topN: 20 })                        # 返回前 20 名
+by stars:     vision-router(1174) > mnemon(701) > config-manager(240)
+              > find-plugin(206) > memento(141) > mcp-panel(89) > secure-audit(85)
+
+by downloads: mnemon(50,672) > vision-router(33,058) > find-plugin(22,038)
+              > config-manager(15,291) > mcp-panel(10,058) > memento(5,966)
+              > secure-audit(2,047)
 ```
 
-## 输出
+`dsh-mcp-panel` is **6th by stars (89) but 4th by downloads (10,058/month)** —
+an 89-star plugin that more people actually run than a 240-star one.
+
+**Stars can mislead; downloads don't.** This plugin puts both orderings side by
+side and flags what star ordering under-rates.
+
+## Usage
+
+```
+plugin_adoption()                                 # default: query "dsh", 12 candidates
+plugin_adoption({ queries: ['memory', 'tool'] })  # union of several searches
+plugin_adoption({ limit: 30 })                    # more candidates (slower, costs quota)
+plugin_adoption({ topN: 20 })                     # return the top 20
+```
+
+## Output
 
 ```jsonc
 {
-  "sampled": 12,              // 候选数
-  "withPackage": 9,           // 有 npm 包的
-  "withDownloads": 9,         // 两个数字都拿到、可比较的
-  "topByDownloads": [         // 按下载量排名
+  "sampled": 12,               // candidates found
+  "withPackage": 9,            // that have an npm package
+  "withDownloads": 9,          // both numbers available, comparable
+  "topByDownloads": [
     { "name": "dsh-mnemon", "downloads": 50672, "stars": 701,
       "starRank": 2, "downloadRank": 1 }
   ],
-  "underratedByStars": [      // 被星数低估的（shift > 0）
+  "underratedByStars": [       // shift > 0
     { "name": "dsh-mcp-panel", "stars": 89, "downloads": 10058,
       "starRank": 6, "downloadRank": 5, "shift": 1 }
   ],
-  "noPackage": ["owner/repo"],  // 没有 npm 包的，单列，不当成 0
-  "requestFailures": [],        // 请求失败逐条列出，不静默
+  "noPackage": ["owner/repo"], // no npm package; listed, never treated as 0
+  "requestFailures": [],       // every request failure, never silent
   "sources": { "catalog": "...", "npm": "...", "fetchedAt": "..." }
 }
 ```
 
-`shift = starRank - downloadRank`，正数表示「下载量排名比星数排名更高」。
+`shift = starRank - downloadRank`. Positive means downloads rank it higher than
+stars do.
 
-## 关于配额（重要）
+## About quota (important)
 
-1024Store catalog API 匿名限额是 **50 请求/天、10 请求/分钟**（其官方文档）。
-一次默认运行 = 1 次 catalog 请求 + 最多 12 次 npm 请求。
+The 1024Store catalog API is anonymous at **50 requests/day, 10/minute** (its
+own docs). One default run = 1 catalog call + at most 12 npm calls.
 
-所以这个插件：
+So this plugin:
 
-- **默认只取 12 个候选**，不会一次烧掉你当天的配额；
-- 请求之间**至少间隔 1.2 秒**，不突发；
-- 遇到 **429 会退避重试**（5s / 15s / 45s），然后明确报告，不死循环；
-- 遇到**超时会重试一次**，DNS/连接失败不重试；
-- **任何失败都写进 `requestFailures`**，不会把"网络断了"显示成"没有插件"。
+- Samples **12 candidates by default**, so a first run cannot exhaust your day
+- Paces requests **1.2s apart**, never bursted
+- **Backs off on 429** (5s / 15s / 45s), then reports — never spins
+- Retries once on **timeout**; does not retry DNS or connection failures
+- Writes **every failure into `requestFailures`** — a network fault must not
+  render as "0 plugins"
 
-最后一条是设计原则：**一份说"0 个插件"的报告，如果其实是网络故障，比一份说"我没查到"的报告危险得多**——前者会被当成结论。
+That last one is the design principle: **a report that says "0 plugins" when the
+network actually failed is more dangerous than one that says "I could not tell"**,
+because the first reads as a finding.
 
-## 数据来源
+## Data sources
 
-| 数据 | 来源 |
+| Data | Source |
 |---|---|
-| 插件列表、star、安装数 | `api.deepseek1024.com/v1/plugins/search` |
-| 月下载量 | `api.npmjs.org/downloads/point/last-month/<包名>` |
+| Plugin list, stars, install counts | `api.deepseek1024.com/v1/plugins/search` |
+| Monthly downloads | `api.npmjs.org/downloads/point/last-month/<pkg>` |
 
-两个都是公开只读接口，无需鉴权。
+Both are public read-only endpoints. No authentication.
 
-## 局限
+## Limitations
 
-- **没有 npm 包的插件无法参与比较**，已单列在 `noPackage`——"没发布包"和"没人下载"是两件事。
-- star 来自 catalog 快照，下载量是 npm 的当月口径，两者时间窗不同。
-- 下载量包含 CI、镜像、自动化安装，不完全等于"人在用"。
-- 采样取决于 `queries`，不是全量。
+- **Plugins without an npm package cannot be compared**; they are listed under
+  `noPackage` — "not published" and "nobody downloaded it" are different facts.
+- Stars come from a catalog snapshot; downloads are npm's current-month window.
+  The two time windows differ.
+- Downloads include CI, mirrors, and automated installs — not purely "humans using it".
+- Sampling depends on `queries`; it is not the full catalog.
 
-## 相关
+## Development
 
-[dsh-plugin-trust-audit](https://github.com/Anguis-L/dsh-plugin-trust-audit) —— 审计插件 HTTP 路由是否真的做了鉴权栅栏。
+```bash
+node --check index.js && node --check lib/adoption.mjs   # syntax
+node --test test/logic.test.mjs                          # offline logic tests
+```
+
+The tests are **offline on purpose**: running them against the live API would
+spend the caller's 50/day anonymous quota, which is exactly what this plugin
+exists to avoid.
+
+## Related
+
+[dsh-plugin-trust-audit](https://github.com/Anguis-L/dsh-plugin-trust-audit) —
+audit whether DSH plugin HTTP routes are actually fenced.
+
+## License
+
+MIT
