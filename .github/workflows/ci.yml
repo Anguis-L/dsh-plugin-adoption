@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # This plugin ships plain ESM with no build step, so "does it parse" and
+      # "does it behave" are the whole gate. Both have caught real bugs.
+      - name: syntax
+        run: |
+          node --check index.js
+          node --check lib/adoption.mjs
+
+      - name: package.json is valid and BOM-free
+        run: |
+          node -e "
+            const fs = require('node:fs')
+            const b = fs.readFileSync('package.json')
+            if (b[0] === 0xEF && b[1] === 0xBB && b[2] === 0xBF) {
+              console.error('package.json has a UTF-8 BOM')
+              process.exit(1)
+            }
+            const p = JSON.parse(b.toString('utf8'))
+            if (!p.dsh || !p.dsh.bundle || !p.dsh.bundle.patch) {
+              console.error('package.json is missing dsh.bundle.patch')
+              process.exit(1)
+            }
+            console.log('ok, version', p.version)
+          "
+
+      - name: cordis.patch.yml is committed
+        run: test -f cordis.patch.yml
+
+      - name: lib/ matches a fresh npm pack
+        run: |
+          npm pack --dry-run 2>&1 | grep -q 'lib/adoption.mjs' || {
+            echo 'lib/adoption.mjs is not in the published files list' >&2
+            exit 1
+          }
+
+      # Offline logic test: no network, no quota. Uses a fixture so the
+      # ranking and rank-shift logic is verified on every push.
+      - name: logic against a fixture
+        run: node test/logic.test.mjs
