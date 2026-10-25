@@ -9,7 +9,25 @@ Rank DSH plugins by **real monthly npm downloads** instead of GitHub stars.
 
 ## Install
 
-**Recommended** — this form is counted by 1024Store's install analytics:
+**Recommended** — a prebuilt tarball, so there is no build step and no npm
+publish in the way:
+
+```bash
+dsh plugin --profile <your-profile> add \
+  https://github.com/Anguis-L/dsh-plugin-adoption/releases/download/v0.1.0/dsh-plugin-adoption-0.1.0.tgz
+```
+
+Verified end to end on a real DSH host: the command above installs in ~4s, and
+`dsh --profile <profile> --dump-config` then shows the bundle layer:
+
+```
+# == dsh-plugin-adoption
+- id: plugin-adoption
+  name: dsh-plugin-adoption
+```
+
+Installing from the repository also works, and that form is the one 1024Store's
+install analytics counts:
 
 ```bash
 dsh plugin --profile <your-profile> add github:Anguis-L/dsh-plugin-adoption
