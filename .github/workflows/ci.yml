@@ -50,11 +50,8 @@ jobs:
 
       - name: lib/ matches a fresh npm pack
         run: |
-          npm pack --dry-run 2>&1 | grep -q 'lib/adoption.mjs' || {
-            echo 'lib/adoption.mjs is not in the published files list' >&2
-            exit 1
-          }
-          for f in lib/http.mjs lib/xray.mjs lib/risk.mjs; do
+          for f in lib/adoption.mjs lib/http.mjs lib/xray.mjs lib/risk.mjs \
+                   lib/semver.mjs lib/versionline.mjs; do
             npm pack --dry-run 2>&1 | grep -q "$f" || {
               echo "$f is not in the published files list" >&2
               exit 1
@@ -62,10 +59,14 @@ jobs:
           done
 
       # Offline logic tests: no network, no quota. Fixtures pin the ranking,
-      # rank-shift and capability-risk logic on every push. The capability
-      # tests stub globalThis.fetch, so they never touch the 14.9MB snapshot.
+      # rank-shift, capability-risk and version-line logic on every push. The
+      # capability and version tests stub globalThis.fetch, so they never touch
+      # the 14.9MB snapshot or the npm registry.
       - name: logic against a fixture
         run: node test/logic.test.mjs
 
       - name: capability dimension against a fixture
         run: node test/capability.test.mjs
+
+      - name: version line against a fixture
+        run: node test/version.test.mjs

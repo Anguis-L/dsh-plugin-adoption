@@ -45,6 +45,10 @@ export function apply(ctx) {
       + '和具体能力 flags（exec / token_env / prompt_surface / net_server / api_intercept 等），'
       + '新增「按能力面风险排序」和一个「同时高下载量 且 高风险」的名单 —— '
       + '后者回答的是「哪些被大量安装的插件具备敏感能力」。\n'
+      + '第三维度（版本线）：一位真实用户说他的筛选顺序是「先看这插件跟哪条 tools 版本线走，再看下载量」——'
+      + '本工具原来只覆盖第二步。现在会读每个插件声明的 @deepseek-ai/dsh-tools peerDependency，'
+      + '判断本机这条线是否接受它：不接受的标 blocked 并直接给出「哪个已发布版本能装」，'
+      + '省掉反复重装试错。本机版本从宿主自己的 package.json 读出，不写死。\n'
       + '能力面数据来自第三方静态扫描，回答「这个插件能做什么」，不回答「它是不是恶意」。'
       + '未分级的插件一律标 unknown，不会当成安全（C0）处理。\n'
       + '只发只读 GET，不写任何东西；没有 npm 包的插件会单列，不会当成 0。',
@@ -70,6 +74,21 @@ export function apply(ctx) {
           + 'badge = 跳过全量文件，只查 badge（快得多，但只有 level、没有 flags，且只覆盖有仓库地址的候选）；'
           + 'off = 关闭该维度（等同本插件旧版行为）。',
       },
+      versionLine: {
+        type: 'string',
+        description:
+          '版本线维度的开关。auto（默认）= 查每个候选声明的 @deepseek-ai/dsh-tools peerDependency，'
+          + '判断本机装的这条线是否接受它，不接受就标 blocked 并给出「哪个已发布版本能装」；'
+          + 'off = 关闭该维度。'
+          + '注意：本机版本是从宿主自己的 package.json 读出来的，不写死；'
+          + '读不到时可用 localVersion 参数或 DSH_TOOLS_VERSION 环境变量指定。'
+          + '为控制请求数，单次最多查 24 个候选，未查的标 unknown（不是「装得上」）。',
+      },
+      localVersion: {
+        type: 'string',
+        description:
+          '手动指定本机 dsh-tools 版本（如 "0.2.1-rc.2"），用于读不到宿主 package.json 的环境。不填则自动探测。',
+      },
     },
     output: textOutput,
     async execute(args) {
@@ -77,7 +96,9 @@ export function apply(ctx) {
       const limit = Number(args?.limit) || undefined
       const topN = Number(args?.topN) || undefined
       const capability = typeof args?.capability === 'string' ? args.capability : undefined
-      return adoption({ queries, limit, topN, capability })
+      const versionLine = typeof args?.versionLine === 'string' ? args.versionLine : undefined
+      const localVersion = typeof args?.localVersion === 'string' ? args.localVersion : undefined
+      return adoption({ queries, limit, topN, capability, versionLine, localVersion })
     },
   })
 }

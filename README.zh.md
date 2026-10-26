@@ -4,7 +4,7 @@
 > English: [README.md](README.md).
 
 按**真实 npm 月下载量**给 DSH 插件排名，而不是按 GitHub 星数。
-同时带一个独立的第二维度：**能力面风险（C0–C3）**。
+同时带两个独立维度：**能力面风险（C0–C3）** 和 **版本线（装不装得上）**。
 
 [![DSH 1024Store](https://img.shields.io/badge/1024Store-catalogued-blue)](https://deepseek1024.com/)
 
@@ -15,7 +15,7 @@
 
 | | |
 |---|---|
-| 读取 | 1024Store catalog 公开接口（只读）、npm 官方下载量接口（只读）、dsh-xray 能力面快照（只读）|
+| 读取 | 1024Store catalog 公开接口（只读）、npm registry / 下载量接口（只读）、dsh-xray 能力面快照（只读）|
 | 写入 | **无** —— 不写文件、不改配置、不改 registry 状态、不动其它插件 |
 | 网络 | 只发 GET，去公开接口、npm registry 和 dsh-xray |
 | 注册 | 一个工具 `plugin_adoption`，自身不注册 HTTP 路由 |
@@ -112,6 +112,8 @@ plugin_adoption({ limit: 30 })                       # 更多候选（会更慢�
 plugin_adoption({ topN: 20 })                        # 每个视角返回前 20 名
 plugin_adoption({ capability: 'badge' })             # 跳过 14.9MB 全量文件，只查 badge
 plugin_adoption({ capability: 'off' })               # 关掉能力面维度（旧版行为）
+plugin_adoption({ versionLine: 'off' })              # 关掉版本线维度
+plugin_adoption({ localVersion: '0.2.1-rc.2' })      # 读不到本机版本时手动指定
 ```
 
 ## 第二维度：能力面风险
@@ -171,6 +173,63 @@ dsh-xray 里 `level: -1` 是「跳过扫描」的哨兵值（实测 349 条：`s
 一个仓库不在 dsh-xray 里是**数据**（`note: "dsh-xray 未收录该仓库"`），
 跟传输失败分开报 —— 「查不到」和「它没有」是两件事。
 
+## 第三维度：版本线（装不装得上）
+
+这一维度来自一位真实用户在评论里的筛选顺序：
+
+> 「我装插件先翻它跟哪条 tools 版本线走，再看下载量。热门卡在旧线上装不上，
+> 真不是网络问题；写精确版本再豁免，比反复重装省事。」
+
+**他的顺序是「版本线 → 下载量」，而本工具原来只覆盖第二步。** 现在补上了第一步。
+
+做法：读插件 `package.json` 里 `peerDependencies["@deepseek-ai/dsh-tools"]` 声明的范围，
+判断**本机装的这条线**接不接受它。
+
+| status | 含义 | 你该做什么 |
+|---|---|---|
+| `ok` | 范围接受本机版本 | 直接装 |
+| `blocked` | 范围不接受本机版本 | 装不上；报告同时给出**哪个已发布版本能装** |
+| `no-constraint` | 没声明这条 peerDependency | 不受这条线约束（实测占多数）|
+| `undecidable` | 声明了，但不是可判定的版本范围（`workspace:*`、git URL、tag）| 只能人工判断 |
+| `unknown` | 查不到（没有包名 / registry 没答 / 达到查询上限）| **不是「装得上」** |
+
+### 这里有个陷阱：本机版本是 prerelease
+
+本机是 `0.2.1-rc.2`。semver 的规则是：**prerelease 版本只被「同一个 major.minor.patch
+且范围里写了 prerelease」的范围接受**。所以实测（已用 npm 自己的 `semver` 逐条复核）：
+
+```
+0.2.1-rc.2  satisfies  "^0.2.1"        -> false
+0.2.1-rc.2  satisfies  "*"             -> false   ← 看着最宽松，其实不接受
+0.2.1-rc.2  satisfies  ">=0.1.0"       -> false   ← 同上
+0.2.1-rc.2  satisfies  "^0.2.1-rc.1"   -> true    ← 只有这种才接受
+```
+
+这就是为什么 `dsh-bili-scroll` 声明 `"*"` 也会被判成 `blocked`。看起来反直觉，
+但和 npm 的行为一致 —— 如果这里写成「装得上」，用户会照着去装，然后失败。
+
+### 本机版本是读出来的，不是写死的
+
+顺序：`DSH_TOOLS_VERSION` 环境变量 → Node 解析 `@deepseek-ai/dsh-tools/package.json`
+→ 一组候选路径（含 Electron 的 `process.resourcesPath`、profile 树、安装目录）。
+读不到就**明确说读不到**，不会猜一个版本 —— 猜错会让所有插件都显示 `blocked`。
+
+> ⚠️ 已知局限：Desktop 版把 `dsh-tools` 打进 `app.asar`，**只有 Electron 宿主进程
+> 能读**，普通 shell 读不到。所以在这种安装下如果宿主也没暴露解析路径，
+> 需要用 `DSH_TOOLS_VERSION` 或 `localVersion` 参数指定一次。
+
+### 包名必须是准的
+
+仓库名 ≠ npm 包名（实测猜中率约 50%）。所以包名只从**可信来源**取：
+catalog 的 `install` 字段，或 `resolvePackage` 用 registry 里的 `repository.url`
+核对过真的指向这个仓库。取不到就报 `unknown`，**不猜** —— 猜错等于拿别人的
+peerDependencies 当成它的。
+
+### 请求成本
+
+每个候选一次 packument GET，**单次运行最多 24 个**，未查的标 `unknown` 并在
+`versionLines.note` 里说明数量。所有请求共用同一个 1.2s 节流时钟。
+
 ## 输出
 
 ```jsonc
@@ -201,6 +260,21 @@ dsh-xray 里 `level: -1` 是「跳过扫描」的哨兵值（实测 349 条：`s
   "dangerousCombos": [         // 危险组合在候选池里出现了几次
     { "id": "exec+token_env", "ecosystemCount": 1135, "inCandidates": 5 }
   ],
+  "versionLines": {            // 第三维度：版本线
+    "enabled": true,
+    "localVersion": "0.2.1-rc.2",              // 读出来的，不是写死的
+    "localVersionSource": "env:DSH_TOOLS_VERSION",
+    "queried": 24,
+    "skippedForBudget": 0,
+    "statusCounts": { "ok": 8, "blocked": 6, "no-constraint": 9,
+                      "undecidable": 1, "unknown": 0 },
+    "blockedPlugins": [                        // 装不上的，带可安装版本
+      { "name": "dsh-find-plugin", "pkg": "dsh-find-plugin",
+        "declaredRange": "^0.1.0-rc.6 || ^0.1.1-rc.1 || …",
+        "installable": { "matching": ["0.1.0"], "highest": "0.1.0", "total": 1 } }
+    ],
+    "note": null
+  },
   "underratedByStars": [      // 被星数低估的（shift > 0）
     { "name": "dsh-mcp-panel", "stars": 89, "downloads": 10058,
       "starRank": 6, "downloadRank": 5, "shift": 1 }
@@ -210,6 +284,18 @@ dsh-xray 里 `level: -1` 是「跳过扫描」的哨兵值（实测 349 条：`s
   "capabilityFailures": [],     // 能力面 join 的失败，单独一组
   "sources": { "catalog": "...", "npm": "...", "xray": "...", "fetchedAt": "..." }
 }
+```
+
+每行 `topByDownloads` 同时带 `capability` 和 `versionLine`：
+
+```jsonc
+{ "name": "dsh-find-plugin", "downloads": 22038,
+  "versionLine": {
+    "status": "blocked", "pkg": "dsh-find-plugin", "localVersion": "0.2.1-rc.2",
+    "declaredRange": "^0.1.0-rc.6 || ^0.1.1-rc.1 || …",
+    "satisfies": false, "blocking": true,
+    "installable": { "matching": ["0.1.0"], "highest": "0.1.0", "total": 1 },
+    "reason": "声明的范围不接受本机 0.2.1-rc.2" } }
 ```
 
 `shift = starRank - downloadRank`，正数表示「下载量排名比星数排名更高」。
@@ -236,6 +322,8 @@ dsh-xray 里 `level: -1` 是「跳过扫描」的哨兵值（实测 349 条：`s
 | 插件列表、star、安装数 | `api.deepseek1024.com/v1/plugins/search` |
 | 月下载量 | `api.npmjs.org/downloads/point/last-month/<包名>` |
 | 能力面等级 + flags | `unstone.github.io/dsh-xray/data.json`（全量）或 `.../badge/<owner>__<repo>.json`（降级）|
+| 版本线（peerDependencies）| `registry.npmjs.org/<包名>` 的 packument |
+| 本机 dsh-tools 版本 | 宿主自己的 `package.json`（自动探测）或 `DSH_TOOLS_VERSION` |
 
 都是公开只读接口，无需鉴权。
 
@@ -252,6 +340,11 @@ dsh-xray 里 `level: -1` 是「跳过扫描」的哨兵值（实测 349 条：`s
   等级本身（C0–C3）才是发布方的口径。两者在代码里分开标注，方便你不同意某一条。
 - badge 降级路径只给等级，**没有 flags**，所以那条路上 `sensitive` 恒为空 ——
   空并非"没有敏感能力"，是"这次没拿到"。
+- **版本线判的是「npm 会不会拒绝安装」，不是「装上后能不能跑」。** 范围满足只是必要条件：
+  peer 声明写错、运行时 API 变了，都可能装得上但跑不起来。
+- 版本线读的是 `latest` 那个版本的 peer 声明（装的就是它）。历史版本各自的声明不同，
+  本报告不逐一展开。
+- 单次最多查 24 个候选的 packument；未查的标 `unknown`，**不是「装得上」**。
 
 ## 相关
 

@@ -1,7 +1,8 @@
 # dsh-plugin-adoption
 
 Rank DSH plugins by **real monthly npm downloads** instead of GitHub stars.
-It carries a separate second dimension too: **capability-surface risk (C0–C3)**.
+It carries two further independent dimensions: **capability-surface risk
+(C0–C3)** and **version line (will it even install?)**.
 
 [![DSH 1024Store](https://img.shields.io/badge/1024Store-catalogued-blue)](https://deepseek1024.com/)
 [![CI](https://github.com/Anguis-L/dsh-plugin-adoption/actions/workflows/ci.yml/badge.svg)](https://github.com/Anguis-L/dsh-plugin-adoption/actions/workflows/ci.yml)
@@ -142,7 +143,75 @@ plugin_adoption({ limit: 30 })                    # more candidates (slower, cos
 plugin_adoption({ topN: 20 })                     # top 20 in each view
 plugin_adoption({ capability: 'badge' })          # skip the 14.9MB bulk file; badges only
 plugin_adoption({ capability: 'off' })            # disable the capability dimension
+plugin_adoption({ versionLine: 'off' })           # disable the version-line dimension
+plugin_adoption({ localVersion: '0.2.1-rc.2' })   # state the host version when it cannot be read
 ```
+
+## Third dimension: version line
+
+This one came from a real user comment:
+
+> "I check which tools version line a plugin rides before I look at downloads.
+> Popular ones get stuck on an old line and will not install — that is not a
+> network problem. Pinning an exact version beats reinstalling until it works."
+
+**His order is version line → downloads, and this tool only covered the second
+step.** It now covers the first.
+
+It reads `peerDependencies["@deepseek-ai/dsh-tools"]` from the plugin's
+`package.json` and decides whether the line **installed here** accepts it.
+
+| status | meaning | what to do |
+|---|---|---|
+| `ok` | the range accepts the installed version | install it |
+| `blocked` | the range rejects it | it will not install; the report names **which published version does** |
+| `no-constraint` | no such peerDependency declared | not constrained by this line (the majority) |
+| `undecidable` | declared, but not a version range (`workspace:*`, git URL, tag) | human judgement only |
+| `unknown` | could not find out (no package name / registry silent / over budget) | **not "installs fine"** |
+
+### The trap: the installed version is a prerelease
+
+The host here is `0.2.1-rc.2`. semver's rule is that **a prerelease is only
+accepted by a range that names a prerelease on the same major.minor.patch**. So
+— verified line by line against npm's own `semver`:
+
+```
+0.2.1-rc.2  satisfies  "^0.2.1"        -> false
+0.2.1-rc.2  satisfies  "*"             -> false   <- looks most permissive, still rejects
+0.2.1-rc.2  satisfies  ">=0.1.0"       -> false   <- same
+0.2.1-rc.2  satisfies  "^0.2.1-rc.1"   -> true    <- only this shape accepts
+```
+
+That is why `dsh-bili-scroll`, which declares `"*"`, is reported `blocked`. It
+looks counter-intuitive and matches npm exactly — and writing "installs fine"
+there would send the user into a failed install.
+
+### The installed version is read, not hard-coded
+
+Order: the `DSH_TOOLS_VERSION` environment variable → Node resolving
+`@deepseek-ai/dsh-tools/package.json` → a list of candidate paths (including
+Electron's `process.resourcesPath`, the profile tree, and the install directory).
+When nothing readable is found the report **says so**; guessing a line would make
+every plugin look `blocked`.
+
+> ⚠️ Known limit: the Desktop build packs `dsh-tools` into `app.asar`, which
+> **only the Electron host process can read**. On such an install, if the host
+> exposes no resolvable path either, state the version once via
+> `DSH_TOOLS_VERSION` or the `localVersion` argument.
+
+### The package name must be exact
+
+Repository name ≠ npm package name (guessing hits about 50%). So a name is only
+accepted from a trustworthy source: the catalog's `install` field, or
+`resolvePackage` verifying that the registry's `repository.url` really points at
+this repository. A miss is reported `unknown`, never guessed — a wrong name would
+read someone else's peerDependencies as this plugin's.
+
+### Request cost
+
+One packument GET per candidate, **at most 24 per run**; the rest are marked
+`unknown` with the count stated in `versionLines.note`. Every request shares the
+same 1.2s pacing clock.
 
 ## Second dimension: capability-surface risk
 
@@ -240,6 +309,21 @@ transport failure — "I could not find out" and "it has none" are different fac
   "dangerousCombos": [         // how often each combination occurs here
     { "id": "exec+token_env", "ecosystemCount": 1135, "inCandidates": 5 }
   ],
+  "versionLines": {            // third dimension: version line
+    "enabled": true,
+    "localVersion": "0.2.1-rc.2",              // read, not hard-coded
+    "localVersionSource": "env:DSH_TOOLS_VERSION",
+    "queried": 24,
+    "skippedForBudget": 0,
+    "statusCounts": { "ok": 8, "blocked": 6, "no-constraint": 9,
+                      "undecidable": 1, "unknown": 0 },
+    "blockedPlugins": [                        // will not install, plus what would
+      { "name": "dsh-find-plugin", "pkg": "dsh-find-plugin",
+        "declaredRange": "^0.1.0-rc.6 || ^0.1.1-rc.1 || …",
+        "installable": { "matching": ["0.1.0"], "highest": "0.1.0", "total": 1 } }
+    ],
+    "note": null
+  },
   "underratedByStars": [       // shift > 0
     { "name": "dsh-mcp-panel", "stars": 89, "downloads": 10058,
       "starRank": 6, "downloadRank": 5, "shift": 1 }
@@ -249,6 +333,18 @@ transport failure — "I could not find out" and "it has none" are different fac
   "capabilityFailures": [],    // capability-join failures, kept separate
   "sources": { "catalog": "...", "npm": "...", "xray": "...", "fetchedAt": "..." }
 }
+```
+
+Each `topByDownloads` row carries both extra dimensions:
+
+```jsonc
+{ "name": "dsh-find-plugin", "downloads": 22038,
+  "versionLine": {
+    "status": "blocked", "pkg": "dsh-find-plugin", "localVersion": "0.2.1-rc.2",
+    "declaredRange": "^0.1.0-rc.6 || ^0.1.1-rc.1 || …",
+    "satisfies": false, "blocking": true,
+    "installable": { "matching": ["0.1.0"], "highest": "0.1.0", "total": 1 },
+    "reason": "the declared range does not accept the installed 0.2.1-rc.2" } }
 ```
 
 `shift = starRank - downloadRank`. Positive means downloads rank it higher than
@@ -279,6 +375,8 @@ because the first reads as a finding.
 | Plugin list, stars, install counts | `api.deepseek1024.com/v1/plugins/search` |
 | Monthly downloads | `api.npmjs.org/downloads/point/last-month/<pkg>` |
 | Capability level + flags | `unstone.github.io/dsh-xray/data.json` (bulk) or `.../badge/<owner>__<repo>.json` (degraded) |
+| Version line (peerDependencies) | the packument at `registry.npmjs.org/<pkg>` |
+| Installed dsh-tools version | the host's own `package.json` (auto-detected), or `DSH_TOOLS_VERSION` |
 
 All are public read-only endpoints. No authentication.
 
@@ -301,12 +399,20 @@ All are public read-only endpoints. No authentication.
 - The badge fallback yields **level only, no flags**, so `sensitive` is always
   empty on that path — empty means "not fetched this time", not "no sensitive
   capabilities".
+- **The version line decides whether npm would refuse the install, not whether
+  the plugin then runs.** A satisfied range is necessary, not sufficient: a
+  wrong peer declaration or a changed runtime API can still install and break.
+- The version line reads the `latest` version's peer block (that is what gets
+  installed). Historical versions declare different ranges; this report does not
+  expand them one by one.
+- At most 24 candidates are checked per run; the rest are `unknown`, **not
+  "installs fine"**.
 
 ## Development
 
 ```bash
-node --check index.js && node --check lib/adoption.mjs   # syntax
-node --test test/logic.test.mjs test/capability.test.mjs  # offline logic tests
+node --check index.js && for f in lib/*.mjs; do node --check "$f"; done
+node --test test/logic.test.mjs test/capability.test.mjs test/version.test.mjs
 ```
 
 The tests are **offline on purpose**: running them against the live API would
