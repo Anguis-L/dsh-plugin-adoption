@@ -29,7 +29,7 @@
     "type": "git",
     "url": "git+https://github.com/Anguis-L/dsh-plugin-adoption.git"
   },
-  "homepage": "https://github.com/Anguis-L/dsh-plugin-adoption#readme",
+  "homepage": "https://anguis-l.github.io/dsh-ranking/",
   "license": "MIT",
   "dsh": {
     "bundle": {
