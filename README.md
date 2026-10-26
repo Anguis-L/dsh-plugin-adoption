@@ -63,6 +63,13 @@ install analytics counts:
 dsh plugin --profile <your-profile> add github:Anguis-L/dsh-plugin-adoption
 ```
 
+<!-- npm-install:this package is also published to npm; the form below is what the
+     market feed's install extractor recognises, so it is listed once the package
+     exists on the registry. -->
+```bash
+dsh plugin --profile <your-profile> add dsh-plugin-adoption
+```
+
 Version **v0.1.0**. Restart `dsh` once after installing (the bundle layer is
 assembled at startup), then ask the agent to call `plugin_adoption`.
 

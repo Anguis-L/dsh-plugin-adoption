@@ -38,6 +38,13 @@ catalog 接口匿名限额每天 50 次，所以默认只采样有限数量的�
 dsh plugin --profile <你的profile> add github:Anguis-L/dsh-plugin-adoption
 ```
 
+<!-- npm-install:this package is also published to npm; the form below is what the
+     market feed's install extractor recognises, so it is listed once the package
+     exists on the registry. -->
+```bash
+dsh plugin --profile <你的profile> add dsh-plugin-adoption
+```
+
 当前版本 **v0.1.0**。装完**重启一次** dsh（bundle 层要重启才组装），
 然后在会话里直接让 agent 调用 `plugin_adoption`。
 
