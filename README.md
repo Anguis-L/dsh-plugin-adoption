@@ -86,6 +86,43 @@ an 89-star plugin that more people actually run than a 240-star one.
 **Stars can mislead; downloads don't.** This plugin puts both orderings side by
 side and flags what star ordering under-rates.
 
+## Finding the right package
+
+Many catalog entries install from a **repository** rather than a package:
+
+```
+dsh plugin --profile web add github:zhu1090093659/dsh-pet
+```
+
+A repository is not a package, and its name is the package name only about
+half the time — measured on 40 random catalog entries, 20 resolved that way.
+The rest are forks and re-publications, where the package scope and the
+repository owner are simply different people:
+
+| repository | package | monthly |
+|---|---|---|
+| `zhu1090093659/dsh-pet` | `@linxin666/dsh-pet` | 131,855 |
+| `PC2005-cloud/dsh-pet` | `dsh-pet` | 66,953 |
+| `cloader/dsh-taskboard` | `dsh-taskboard` | 5,978 |
+| `PerryLink/dsh-memento` | `dsh-memento` | 6,198 |
+
+Guessing from the repository name would attribute the first one's 131,855
+downloads to the wrong package, or drop it entirely.
+
+So the name is **read from the registry** rather than guessed: npm's search
+response carries each package's `repository.url`, and the package whose
+repository points at *this* repository is the one that belongs to it. This is
+the same binding the 1024Store catalog uses.
+
+The npm search endpoint is a different service from the catalog API, so this
+does not touch the catalog's 50/day anonymous quota. Entries with no
+published package still come back empty — that is a fact about the plugin,
+not an error, and they stay in `noPackage` rather than being counted as zero.
+
+The report says how many entries were recovered this way
+(`packageResolved`), so it is visible when a number came from the registry
+rather than from the catalog's own install command.
+
 ## Usage
 
 ```

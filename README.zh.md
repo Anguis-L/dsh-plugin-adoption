@@ -63,6 +63,38 @@ dsh plugin --profile <你的profile> add github:Anguis-L/dsh-plugin-adoption
 
 **星数会说谎，下载量不会。** 这个插件把两个排序并排摆出来，并标出被星数低估的插件。
 
+## 怎么找到对应的 npm 包
+
+catalog 里很多条目的安装命令指向的是**仓库**而不是包：
+
+```
+dsh plugin --profile web add github:zhu1090093659/dsh-pet
+```
+
+仓库不是包，而仓库名等于包名的概率只有一半左右 —— 抽 40 条随机条目实测，
+20 条这样能对上。其余是 fork 和重新发布：包的 scope 和仓库的 owner
+就是不同的人：
+
+| 仓库 | 对应的包 | 月下载 |
+|---|---|---|
+| `zhu1090093659/dsh-pet` | `@linxin666/dsh-pet` | 131,855 |
+| `PC2005-cloud/dsh-pet` | `dsh-pet` | 66,953 |
+| `cloader/dsh-taskboard` | `dsh-taskboard` | 5,978 |
+| `PerryLink/dsh-memento` | `dsh-memento` | 6,198 |
+
+如果按仓库名去猜，第一个的 13 万次下载就会算到错的包上，或者干脆被丢掉。
+
+所以包名是**从 registry 读出来的，不是猜的**：npm 搜索结果里每个包都带
+`repository.url`，其中 repository 指向**这个**仓库的包，才是属于它的包。
+这和 1024Store catalog 用的绑定方式是同一套。
+
+npm 搜索接口和 catalog 接口是两个不同的服务，所以**不占 catalog 每天 50 次的匿名额度**。
+没有发布包的条目仍然是空的 —— 那是插件本身的事实，不是错误，它们仍留在
+`noPackage` 里，不会被当成 0。
+
+报告里会说明有多少条是这样反查出来的（`packageResolved`），
+所以「这个数字来自 registry 而不是 catalog 的安装命令」是看得见的。
+
 ## 用法
 
 ```
