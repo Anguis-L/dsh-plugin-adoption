@@ -45,7 +45,7 @@ dsh plugin --profile <你的profile> add github:Anguis-L/dsh-plugin-adoption
 dsh plugin --profile <你的profile> add dsh-plugin-adoption
 ```
 
-当前版本 **v0.1.0**。装完**重启一次** dsh（bundle 层要重启才组装），
+当前版本 **v0.2.0**。装完**重启一次** dsh（bundle 层要重启才组装），
 然后在会话里直接让 agent 调用 `plugin_adoption`。
 
 ## 为什么需要它

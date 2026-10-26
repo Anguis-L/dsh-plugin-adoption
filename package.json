@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-adoption",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "DSH 插件：按真实 npm 月下载量给插件排名，而不是按 GitHub 星数，并标出被星数排序低估的插件；只读两个公开接口（catalog 与 npm 下载量），只发 GET，不写入、不修改任何插件或配置，也不产出质量分，只报告两种排序的分歧。",
   "type": "module",
   "exports": {

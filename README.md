@@ -1,14 +1,13 @@
-# dsh-plugin-adoption
+﻿# dsh-plugin-adoption
 
 Rank DSH plugins by **real monthly npm downloads** instead of GitHub stars.
 It carries two further independent dimensions: **capability-surface risk
-(C0–C3)** and **version line (will it even install?)**.
+(C0鈥揅3)** and **version line (will it even install?)**.
 
 [![DSH 1024Store](https://img.shields.io/badge/1024Store-catalogued-blue)](https://deepseek1024.com/)
 [![CI](https://github.com/Anguis-L/dsh-plugin-adoption/actions/workflows/ci.yml/badge.svg)](https://github.com/Anguis-L/dsh-plugin-adoption/actions/workflows/ci.yml)
 
-> 中文说明见 [README.zh.md](README.zh.md)。
-
+> 涓枃璇存槑瑙?[README.zh.md](README.zh.md)銆?
 ## What it does and does not do
 
 This plugin **reads** public sources and **ranks** what it finds. It does
@@ -17,7 +16,7 @@ not write, install, modify or rate-limit anything.
 | | |
 |---|---|
 | Reads | the 1024Store catalog API (public, read-only), npm's official downloads endpoint (public, read-only), and the dsh-xray capability snapshot (public, read-only) |
-| Writes | nothing — no file, no config, no registry state, no other plugin |
+| Writes | nothing 鈥?no file, no config, no registry state, no other plugin |
 | Network | GET only, to the public APIs, the npm registry and dsh-xray |
 | Registers | one tool, `plugin_adoption`. No HTTP route of its own |
 | Modifies other plugins | never. It reports a ranking; it does not enforce one |
@@ -25,7 +24,7 @@ not write, install, modify or rate-limit anything.
 The two numbers it compares measure different things and the report says so
 every time: **stars** measure the attention a repository received,
 **downloads** measure installs that actually happened. Neither is a quality
-score, and this plugin does not produce one — it reports the disagreement
+score, and this plugin does not produce one 鈥?it reports the disagreement
 between the two orderings and leaves the judgement to the caller.
 
 Two things it deliberately does not do: it does not count plugins without an
@@ -40,12 +39,12 @@ a bounded number of candidates rather than the whole catalog.
 
 ## Install
 
-**Recommended** — a prebuilt tarball, so there is no build step and no npm
+**Recommended** 鈥?a prebuilt tarball, so there is no build step and no npm
 publish in the way:
 
 ```bash
 dsh plugin --profile <your-profile> add \
-  https://github.com/Anguis-L/dsh-plugin-adoption/releases/download/v0.1.0/dsh-plugin-adoption-0.1.0.tgz
+  https://github.com/Anguis-L/dsh-plugin-adoption/releases/download/v0.2.0/dsh-plugin-adoption-0.2.0.tgz
 ```
 
 Verified end to end on a real DSH host: the command above installs in ~4s, and
@@ -71,7 +70,7 @@ dsh plugin --profile <your-profile> add github:Anguis-L/dsh-plugin-adoption
 dsh plugin --profile <your-profile> add dsh-plugin-adoption
 ```
 
-Version **v0.1.0**. Restart `dsh` once after installing (the bundle layer is
+Version **v0.2.0**. Restart `dsh` once after installing (the bundle layer is
 assembled at startup), then ask the agent to call `plugin_adoption`.
 
 ## Why this exists
@@ -91,8 +90,7 @@ by downloads: mnemon(50,672) > vision-router(33,058) > find-plugin(22,038)
               > secure-audit(2,047)
 ```
 
-`dsh-mcp-panel` is **6th by stars (89) but 4th by downloads (10,058/month)** —
-an 89-star plugin that more people actually run than a 240-star one.
+`dsh-mcp-panel` is **6th by stars (89) but 4th by downloads (10,058/month)** 鈥?an 89-star plugin that more people actually run than a 240-star one.
 
 **Stars can mislead; downloads don't.** This plugin puts both orderings side by
 side and flags what star ordering under-rates.
@@ -106,7 +104,7 @@ dsh plugin --profile web add github:zhu1090093659/dsh-pet
 ```
 
 A repository is not a package, and its name is the package name only about
-half the time — measured on 40 random catalog entries, 20 resolved that way.
+half the time 鈥?measured on 40 random catalog entries, 20 resolved that way.
 The rest are forks and re-publications, where the package scope and the
 repository owner are simply different people:
 
@@ -127,7 +125,7 @@ the same binding the 1024Store catalog uses.
 
 The npm search endpoint is a different service from the catalog API, so this
 does not touch the catalog's 50/day anonymous quota. Entries with no
-published package still come back empty — that is a fact about the plugin,
+published package still come back empty 鈥?that is a fact about the plugin,
 not an error, and they stay in `noPackage` rather than being counted as zero.
 
 The report says how many entries were recovered this way
@@ -152,10 +150,10 @@ plugin_adoption({ localVersion: '0.2.1-rc.2' })   # state the host version when 
 This one came from a real user comment:
 
 > "I check which tools version line a plugin rides before I look at downloads.
-> Popular ones get stuck on an old line and will not install — that is not a
+> Popular ones get stuck on an old line and will not install 鈥?that is not a
 > network problem. Pinning an exact version beats reinstalling until it works."
 
-**His order is version line → downloads, and this tool only covered the second
+**His order is version line 鈫?downloads, and this tool only covered the second
 step.** It now covers the first.
 
 It reads `peerDependencies["@deepseek-ai/dsh-tools"]` from the plugin's
@@ -173,7 +171,7 @@ It reads `peerDependencies["@deepseek-ai/dsh-tools"]` from the plugin's
 
 The host here is `0.2.1-rc.2`. semver's rule is that **a prerelease is only
 accepted by a range that names a prerelease on the same major.minor.patch**. So
-— verified line by line against npm's own `semver`:
+鈥?verified line by line against npm's own `semver`:
 
 ```
 0.2.1-rc.2  satisfies  "^0.2.1"        -> false
@@ -183,28 +181,28 @@ accepted by a range that names a prerelease on the same major.minor.patch**. So
 ```
 
 That is why `dsh-bili-scroll`, which declares `"*"`, is reported `blocked`. It
-looks counter-intuitive and matches npm exactly — and writing "installs fine"
+looks counter-intuitive and matches npm exactly 鈥?and writing "installs fine"
 there would send the user into a failed install.
 
 ### The installed version is read, not hard-coded
 
-Order: the `DSH_TOOLS_VERSION` environment variable → Node resolving
-`@deepseek-ai/dsh-tools/package.json` → a list of candidate paths (including
+Order: the `DSH_TOOLS_VERSION` environment variable 鈫?Node resolving
+`@deepseek-ai/dsh-tools/package.json` 鈫?a list of candidate paths (including
 Electron's `process.resourcesPath`, the profile tree, and the install directory).
 When nothing readable is found the report **says so**; guessing a line would make
 every plugin look `blocked`.
 
-> ⚠️ Known limit: the Desktop build packs `dsh-tools` into `app.asar`, which
+> 鈿狅笍 Known limit: the Desktop build packs `dsh-tools` into `app.asar`, which
 > **only the Electron host process can read**. On such an install, if the host
 > exposes no resolvable path either, state the version once via
 > `DSH_TOOLS_VERSION` or the `localVersion` argument.
 
 ### The package name must be exact
 
-Repository name ≠ npm package name (guessing hits about 50%). So a name is only
+Repository name 鈮?npm package name (guessing hits about 50%). So a name is only
 accepted from a trustworthy source: the catalog's `install` field, or
 `resolvePackage` verifying that the registry's `repository.url` really points at
-this repository. A miss is reported `unknown`, never guessed — a wrong name would
+this repository. A miss is reported `unknown`, never guessed 鈥?a wrong name would
 read someone else's peerDependencies as this plugin's.
 
 ### Request cost
@@ -233,19 +231,18 @@ data, while dsh-xray knows the capabilities but not who installs them.
 
 The report therefore gains two views:
 
-- `topByRisk` — ordered by capability risk, worst first (ties broken by downloads)
-- `highAdoptionAndHighRisk` — plugins that are **both widely installed and
+- `topByRisk` 鈥?ordered by capability risk, worst first (ties broken by downloads)
+- `highAdoptionAndHighRisk` 鈥?plugins that are **both widely installed and
   sensitive**. This is the genuinely useful line: which widely-installed plugins
   can do sensitive things. The threshold is not invented: it is **half the
   median download count of the candidate pool**, and the number used is
   reported alongside so a reader can re-judge where the line should sit.
 
 The governing rule: **ungraded is not safe**. A plugin with `level: null` lands
-in the `unknown` bucket and is never sorted onto the "harmless" side — the same
+in the `unknown` bucket and is never sorted onto the "harmless" side 鈥?the same
 principle as "no npm package is not zero downloads".
 
-In dsh-xray, `level: -1` is a **skipped** sentinel (measured: 349 records —
-324 `skipped: no scannable code`, 23 `skipped: download failed`, 2 scanner
+In dsh-xray, `level: -1` is a **skipped** sentinel (measured: 349 records 鈥?324 `skipped: no scannable code`, 23 `skipped: download failed`, 2 scanner
 errors). Those were never graded, so they are also `unknown`, and the original
 `status` is preserved in `ungradedReason`.
 
@@ -261,7 +258,7 @@ The `capability` parameter selects the path:
 |---|---|
 | `auto` (default) | bulk snapshot first; on failure fall back to per-repository badge lookups |
 | `bulk` | bulk only; if it fails there is no capability data, and the report says so |
-| `badge` | skip the bulk file; query `badge/<owner>__<repo>.json` (~92 bytes, 300–700 ms each). **Level only, no flags**, and only for candidates that have a repository URL |
+| `badge` | skip the bulk file; query `badge/<owner>__<repo>.json` (~92 bytes, 300鈥?00 ms each). **Level only, no flags**, and only for candidates that have a repository URL |
 | `off` | disable the dimension entirely |
 
 Every row produced by a degraded path carries `partial: true`, and
@@ -270,14 +267,14 @@ presented as if it were the full picture.
 
 **Three separate failure exits**, none of which silently becomes an empty array:
 
-- `requestFailures` — any request failure (including exhausted 429 backoff, timeouts)
-- `capabilityFailures` — failures specific to the capability join
-- `capabilitySource.reason` — why the whole dimension is unavailable
-  (`too-large` / `invalid-json` / `http-500` / …)
+- `requestFailures` 鈥?any request failure (including exhausted 429 backoff, timeouts)
+- `capabilityFailures` 鈥?failures specific to the capability join
+- `capabilitySource.reason` 鈥?why the whole dimension is unavailable
+  (`too-large` / `invalid-json` / `http-500` / 鈥?
 
 A repository missing from dsh-xray is **data**
 (`note: "dsh-xray did not index this repository"`), reported separately from a
-transport failure — "I could not find out" and "it has none" are different facts.
+transport failure 鈥?"I could not find out" and "it has none" are different facts.
 
 ## Output
 
@@ -304,7 +301,7 @@ transport failure — "I could not find out" and "it has none" are different fac
   },
   "capabilitySource": {        // how this dimension's data was obtained
     "mode": "auto", "used": "bulk", "available": true,
-    "graded": 102, "ungraded": 1, "legend": { "0": "C0 …", "3": "C3 …" }
+    "graded": 102, "ungraded": 1, "legend": { "0": "C0 鈥?, "3": "C3 鈥? }
   },
   "dangerousCombos": [         // how often each combination occurs here
     { "id": "exec+token_env", "ecosystemCount": 1135, "inCandidates": 5 }
@@ -319,7 +316,7 @@ transport failure — "I could not find out" and "it has none" are different fac
                       "undecidable": 1, "unknown": 0 },
     "blockedPlugins": [                        // will not install, plus what would
       { "name": "dsh-find-plugin", "pkg": "dsh-find-plugin",
-        "declaredRange": "^0.1.0-rc.6 || ^0.1.1-rc.1 || …",
+        "declaredRange": "^0.1.0-rc.6 || ^0.1.1-rc.1 || 鈥?,
         "installable": { "matching": ["0.1.0"], "highest": "0.1.0", "total": 1 } }
     ],
     "note": null
@@ -341,7 +338,7 @@ Each `topByDownloads` row carries both extra dimensions:
 { "name": "dsh-find-plugin", "downloads": 22038,
   "versionLine": {
     "status": "blocked", "pkg": "dsh-find-plugin", "localVersion": "0.2.1-rc.2",
-    "declaredRange": "^0.1.0-rc.6 || ^0.1.1-rc.1 || …",
+    "declaredRange": "^0.1.0-rc.6 || ^0.1.1-rc.1 || 鈥?,
     "satisfies": false, "blocking": true,
     "installable": { "matching": ["0.1.0"], "highest": "0.1.0", "total": 1 },
     "reason": "the declared range does not accept the installed 0.2.1-rc.2" } }
@@ -359,9 +356,9 @@ So this plugin:
 
 - Samples **12 candidates by default**, so a first run cannot exhaust your day
 - Paces requests **1.2s apart**, never bursted
-- **Backs off on 429** (5s / 15s / 45s), then reports — never spins
+- **Backs off on 429** (5s / 15s / 45s), then reports 鈥?never spins
 - Retries once on **timeout**; does not retry DNS or connection failures
-- Writes **every failure into `requestFailures`** — a network fault must not
+- Writes **every failure into `requestFailures`** 鈥?a network fault must not
   render as "0 plugins"
 
 That last one is the design principle: **a report that says "0 plugins" when the
@@ -383,21 +380,21 @@ All are public read-only endpoints. No authentication.
 ## Limitations
 
 - **Plugins without an npm package cannot be compared**; they are listed under
-  `noPackage` — "not published" and "nobody downloaded it" are different facts.
+  `noPackage` 鈥?"not published" and "nobody downloaded it" are different facts.
 - Stars come from a catalog snapshot; downloads are npm's current-month window.
   The two time windows differ.
-- Downloads include CI, mirrors, and automated installs — not purely "humans using it".
+- Downloads include CI, mirrors, and automated installs 鈥?not purely "humans using it".
 - Sampling depends on `queries`; it is not the full catalog.
 - **The capability grade is third-party static analysis, not a security rating.**
   It answers "what can this plugin do", not "is it malicious". C0 is not proof
-  of harmlessness either — it only means no notable surface was detected, and
+  of harmlessness either 鈥?it only means no notable surface was detected, and
   static scanning cannot see behaviour that only appears at run time.
 - The sensitive-flag subset (`SENSITIVE_FLAGS`) and the risk ordering weights are
-  **this plugin's judgement**, not dsh-xray's; only the C0–C3 grades are the
+  **this plugin's judgement**, not dsh-xray's; only the C0鈥揅3 grades are the
   publisher's. The two are labelled separately in the code so you can disagree
   with one without discarding the other.
 - The badge fallback yields **level only, no flags**, so `sensitive` is always
-  empty on that path — empty means "not fetched this time", not "no sensitive
+  empty on that path 鈥?empty means "not fetched this time", not "no sensitive
   capabilities".
 - **The version line decides whether npm would refuse the install, not whether
   the plugin then runs.** A satisfied range is necessary, not sufficient: a
@@ -421,8 +418,7 @@ exists to avoid.
 
 ## Related
 
-[dsh-plugin-trust-audit](https://github.com/Anguis-L/dsh-plugin-trust-audit) —
-audit whether DSH plugin HTTP routes are actually fenced.
+[dsh-plugin-trust-audit](https://github.com/Anguis-L/dsh-plugin-trust-audit) 鈥?audit whether DSH plugin HTTP routes are actually fenced.
 
 ## License
 
