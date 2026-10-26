@@ -7,6 +7,33 @@ Rank DSH plugins by **real monthly npm downloads** instead of GitHub stars.
 
 > 中文说明见 [README.zh.md](README.zh.md)。
 
+## What it does and does not do
+
+This plugin **reads** two public sources and **ranks** what it finds. It does
+not write, install, modify or rate-limit anything.
+
+| | |
+|---|---|
+| Reads | the 1024Store catalog API (public, read-only) and npm's official downloads endpoint (public, read-only) |
+| Writes | nothing — no file, no config, no registry state, no other plugin |
+| Network | GET only, to two public APIs plus the npm registry |
+| Registers | one tool, `plugin_adoption`. No HTTP route of its own |
+| Modifies other plugins | never. It reports a ranking; it does not enforce one |
+
+The two numbers it compares measure different things and the report says so
+every time: **stars** measure the attention a repository received,
+**downloads** measure installs that actually happened. Neither is a quality
+score, and this plugin does not produce one — it reports the disagreement
+between the two orderings and leaves the judgement to the caller.
+
+Two things it deliberately does not do: it does not count plugins without an
+npm package as zero (they are listed separately, under `noPackage`), and it
+does not hide a failed request behind an empty result (they appear in
+`requestFailures`, with the count of candidates that were actually compared).
+
+The catalog API allows 50 anonymous requests a day, so a default run samples
+a bounded number of candidates rather than the whole catalog.
+
 ## Install
 
 **Recommended** — a prebuilt tarball, so there is no build step and no npm
