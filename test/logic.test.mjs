@@ -110,3 +110,40 @@ test('rankShift returns null when either rank is missing', () => {
   assert.equal(rankShift(3, null), null)
   assert.equal(rankShift(undefined, undefined), null)
 })
+
+test('a short name shared by two packages is reported as ambiguous', () => {
+  // Measured on 2026-10-26: `dsh-pet` and `@linxin666/dsh-pet` are two
+  // different npm packages that share a short name, and they are not
+  // interchangeable. Installing one does not get you the other, so the
+  // short name alone is ambiguous and has to be said out loud.
+  const rows = [
+    { name: 'dsh-pet', pkg: 'dsh-pet' },
+    { name: 'dsh-pet', pkg: '@linxin666/dsh-pet' },
+    { name: 'dsh-memento', pkg: 'dsh-memento' },
+  ]
+  const byShortName = new Map()
+  for (const c of rows) {
+    if (!c.pkg) continue
+    if (!byShortName.has(c.name)) byShortName.set(c.name, new Set())
+    byShortName.get(c.name).add(c.pkg)
+  }
+  const ambiguous = [...byShortName.entries()]
+    .filter(([, pkgs]) => pkgs.size > 1)
+    .map(([name, pkgs]) => ({ name, packages: [...pkgs] }))
+
+  assert.equal(ambiguous.length, 1)
+  assert.equal(ambiguous[0].name, 'dsh-pet')
+  assert.deepEqual(ambiguous[0].packages.sort(),
+    ['@linxin666/dsh-pet', 'dsh-pet'])
+})
+
+test('a short name with a single package is not ambiguous', () => {
+  const rows = [{ name: 'dsh-memento', pkg: 'dsh-memento' }]
+  const byShortName = new Map()
+  for (const c of rows) {
+    if (!byShortName.has(c.name)) byShortName.set(c.name, new Set())
+    byShortName.get(c.name).add(c.pkg)
+  }
+  const ambiguous = [...byShortName.entries()].filter(([, p]) => p.size > 1)
+  assert.equal(ambiguous.length, 0)
+})
