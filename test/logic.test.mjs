@@ -13,7 +13,7 @@ import assert from 'node:assert/strict'
 // Import the real module rather than re-implementing it here. A copy in the
 // test file passes while the shipped code is broken, which is how the
 // `/some/local/path` bug survived the first run of this very test.
-import { packageOf, rankShift } from '../lib/adoption.mjs'
+import { packageOf, rankShift, repoIdOf, repoOfPackage } from '../lib/adoption.mjs'
 
 // The fixtures below are the real catalog x npm numbers measured on
 // 2026-10-25, so the test also pins the finding that justifies the plugin.
@@ -146,4 +146,34 @@ test('a short name with a single package is not ambiguous', () => {
   }
   const ambiguous = [...byShortName.entries()].filter(([, p]) => p.size > 1)
   assert.equal(ambiguous.length, 0)
+})
+
+test('repoIdOf recovers the repository from a github: install target', () => {
+  // The catalog's install command names a repository, not a package. Those
+  // entries have no package name to look up, and the repository name is only
+  // the package name about half the time.
+  assert.equal(repoIdOf('dsh plugin --profile web add github:PC2005-cloud/dsh-pet'),
+    'PC2005-cloud/dsh-pet')
+  assert.equal(repoIdOf('dsh plugin --profile web add owner/repo'), 'owner/repo')
+  // A package target is not a repository.
+  assert.equal(repoIdOf('dsh plugin --profile web add @scope/name'), null)
+  assert.equal(repoIdOf('dsh plugin --profile web add dsh-pet'), null)
+  assert.equal(repoIdOf(undefined), null)
+})
+
+test('repoOfPackage matches a package to the repository it points at', () => {
+  // The measured case: the package owner and the repository owner are
+  // different people, so the package cannot be guessed from the repo name.
+  assert.equal(
+    repoOfPackage('@linxin666/dsh-pet', 'git+https://github.com/zhu1090093659/dsh-pet.git'),
+    'zhu1090093659/dsh-pet')
+  assert.equal(
+    repoOfPackage('dsh-taskboard', 'git+https://github.com/cloader/dsh-taskboard.git'),
+    'cloader/dsh-taskboard')
+  // A package whose name does not match the repository is not this one.
+  assert.equal(
+    repoOfPackage('dsh-pet', 'git+https://github.com/somebody-else/dsh-bundle.git'),
+    null)
+  assert.equal(repoOfPackage('dsh-pet', 'not a url'), null)
+  assert.equal(repoOfPackage(null, 'git+https://github.com/o/r.git'), null)
 })
