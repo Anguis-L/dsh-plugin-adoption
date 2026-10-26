@@ -24,7 +24,9 @@ jobs:
       - name: syntax
         run: |
           node --check index.js
-          node --check lib/adoption.mjs
+          for f in lib/*.mjs test/*.mjs; do
+            node --check "$f"
+          done
 
       - name: package.json is valid and BOM-free
         run: |
@@ -52,8 +54,18 @@ jobs:
             echo 'lib/adoption.mjs is not in the published files list' >&2
             exit 1
           }
+          for f in lib/http.mjs lib/xray.mjs lib/risk.mjs; do
+            npm pack --dry-run 2>&1 | grep -q "$f" || {
+              echo "$f is not in the published files list" >&2
+              exit 1
+            }
+          done
 
-      # Offline logic test: no network, no quota. Uses a fixture so the
-      # ranking and rank-shift logic is verified on every push.
+      # Offline logic tests: no network, no quota. Fixtures pin the ranking,
+      # rank-shift and capability-risk logic on every push. The capability
+      # tests stub globalThis.fetch, so they never touch the 14.9MB snapshot.
       - name: logic against a fixture
         run: node test/logic.test.mjs
+
+      - name: capability dimension against a fixture
+        run: node test/capability.test.mjs

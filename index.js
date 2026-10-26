@@ -5,6 +5,11 @@
  * proxy for "is anyone using this". See lib/adoption.mjs for the measured
  * example and the full rationale.
  *
+ * It also carries a second, deliberately separate dimension: the dsh-xray
+ * capability grade (C0-C3) plus the individual capability flags, so a ranking
+ * can say which widely-installed plugins are also able to execute commands,
+ * read API keys, or patch the runtime. See lib/xray.mjs and lib/risk.mjs.
+ *
  * This file is the host half: it registers one tool and no HTTP route.
  */
 import { adoption } from './lib/adoption.mjs'
@@ -36,6 +41,12 @@ export function apply(ctx) {
       + '为什么需要：社区发现页按 star 排序，但实测 star 排名和下载量排名不一致 —— '
       + '例如 dsh-mcp-panel 按 star 排第 6（89★），按下载排第 4（10,058 次/月）。'
       + '星数衡量关注，下载量衡量实际安装。\n'
+      + '第二维度（能力面风险）：接入 dsh-xray 的公开扫描结果，给每个插件带上 C0-C3 等级'
+      + '和具体能力 flags（exec / token_env / prompt_surface / net_server / api_intercept 等），'
+      + '新增「按能力面风险排序」和一个「同时高下载量 且 高风险」的名单 —— '
+      + '后者回答的是「哪些被大量安装的插件具备敏感能力」。\n'
+      + '能力面数据来自第三方静态扫描，回答「这个插件能做什么」，不回答「它是不是恶意」。'
+      + '未分级的插件一律标 unknown，不会当成安全（C0）处理。\n'
       + '只发只读 GET，不写任何东西；没有 npm 包的插件会单列，不会当成 0。',
     parameters: {
       queries: {
@@ -49,7 +60,15 @@ export function apply(ctx) {
       },
       topN: {
         type: 'number',
-        description: '返回前 N 名。默认 15。',
+        description: '每个视角返回前 N 名。默认 15。',
+      },
+      capability: {
+        type: 'string',
+        description:
+          '能力面数据的取法。auto（默认）= 先取 dsh-xray 全量快照（约 14.9MB，实测 13.8s 冷 / 1.5s 热），'
+          + '失败则降级为逐仓库 badge 查询；bulk = 只要全量，失败就没有数据；'
+          + 'badge = 跳过全量文件，只查 badge（快得多，但只有 level、没有 flags，且只覆盖有仓库地址的候选）；'
+          + 'off = 关闭该维度（等同本插件旧版行为）。',
       },
     },
     output: textOutput,
@@ -57,7 +76,8 @@ export function apply(ctx) {
       const queries = Array.isArray(args?.queries) ? args.queries : undefined
       const limit = Number(args?.limit) || undefined
       const topN = Number(args?.topN) || undefined
-      return adoption({ queries, limit, topN })
+      const capability = typeof args?.capability === 'string' ? args.capability : undefined
+      return adoption({ queries, limit, topN, capability })
     },
   })
 }

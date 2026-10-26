@@ -63,6 +63,17 @@ test('packageOf strips a path fragment', () => {
   assert.equal(packageOf('dsh plugin add name#ref'), 'name')
 })
 
+test('packageOf skips CLI options before the install target', () => {
+  // Measured on 2026-10-26: a real catalog entry ships
+  // `add --allow-build=@dsh-external dsh-pet`. Returning the option cost a
+  // live 404 against npm and would have attributed a different package's
+  // downloads to this entry.
+  assert.equal(packageOf('dsh plugin --profile web add --allow-build=@dsh-external dsh-pet'),
+    'dsh-pet')
+  assert.equal(packageOf('dsh plugin --profile web add --ignore-scripts github:o/r'), null)
+  assert.equal(packageOf('dsh plugin --profile web add -- x'), 'x')
+})
+
 test('ranking by downloads differs from ranking by stars', () => {
   const candidates = FIXTURE.map(f => ({
     ...f, pkg: packageOf(f.install), downloads: f.dl,
@@ -159,6 +170,12 @@ test('repoIdOf recovers the repository from a github: install target', () => {
   assert.equal(repoIdOf('dsh plugin --profile web add @scope/name'), null)
   assert.equal(repoIdOf('dsh plugin --profile web add dsh-pet'), null)
   assert.equal(repoIdOf(undefined), null)
+})
+
+test('repoIdOf skips CLI options before the install target', () => {
+  // Same class of bug as packageOf's: the first token is not always the target.
+  assert.equal(repoIdOf('dsh plugin --profile web add --allow-build=x github:o/r'), 'o/r')
+  assert.equal(repoIdOf('dsh plugin --profile web add --allow-build=x dsh-pet'), null)
 })
 
 test('repoOfPackage matches a package to the repository it points at', () => {

@@ -1,6 +1,7 @@
 # dsh-plugin-adoption
 
 Rank DSH plugins by **real monthly npm downloads** instead of GitHub stars.
+It carries a separate second dimension too: **capability-surface risk (C0–C3)**.
 
 [![DSH 1024Store](https://img.shields.io/badge/1024Store-catalogued-blue)](https://deepseek1024.com/)
 [![CI](https://github.com/Anguis-L/dsh-plugin-adoption/actions/workflows/ci.yml/badge.svg)](https://github.com/Anguis-L/dsh-plugin-adoption/actions/workflows/ci.yml)
@@ -9,14 +10,14 @@ Rank DSH plugins by **real monthly npm downloads** instead of GitHub stars.
 
 ## What it does and does not do
 
-This plugin **reads** two public sources and **ranks** what it finds. It does
+This plugin **reads** public sources and **ranks** what it finds. It does
 not write, install, modify or rate-limit anything.
 
 | | |
 |---|---|
-| Reads | the 1024Store catalog API (public, read-only) and npm's official downloads endpoint (public, read-only) |
+| Reads | the 1024Store catalog API (public, read-only), npm's official downloads endpoint (public, read-only), and the dsh-xray capability snapshot (public, read-only) |
 | Writes | nothing — no file, no config, no registry state, no other plugin |
-| Network | GET only, to two public APIs plus the npm registry |
+| Network | GET only, to the public APIs, the npm registry and dsh-xray |
 | Registers | one tool, `plugin_adoption`. No HTTP route of its own |
 | Modifies other plugins | never. It reports a ranking; it does not enforce one |
 
@@ -30,6 +31,8 @@ Two things it deliberately does not do: it does not count plugins without an
 npm package as zero (they are listed separately, under `noPackage`), and it
 does not hide a failed request behind an empty result (they appear in
 `requestFailures`, with the count of candidates that were actually compared).
+The same rule governs the capability dimension: an ungraded plugin is reported
+as `unknown`, never as `C0`.
 
 The catalog API allows 50 anonymous requests a day, so a default run samples
 a bounded number of candidates rather than the whole catalog.
@@ -129,8 +132,76 @@ rather than from the catalog's own install command.
 plugin_adoption()                                 # default: query "dsh", 12 candidates
 plugin_adoption({ queries: ['memory', 'tool'] })  # union of several searches
 plugin_adoption({ limit: 30 })                    # more candidates (slower, costs quota)
-plugin_adoption({ topN: 20 })                     # return the top 20
+plugin_adoption({ topN: 20 })                     # top 20 in each view
+plugin_adoption({ capability: 'badge' })          # skip the 14.9MB bulk file; badges only
+plugin_adoption({ capability: 'off' })            # disable the capability dimension
 ```
+
+## Second dimension: capability-surface risk
+
+Stars and downloads both answer "how many people use this". Neither answers
+**"what can it do once installed on my machine"**.
+[dsh-xray](https://unstone.github.io/dsh-xray/) publishes that by scanning each
+plugin repository, and this plugin joins it onto the candidate pool.
+
+| Level | Meaning (quoted from the dsh-xray legend) |
+|---|---|
+| C0 | No notable capability surface. |
+| C1 | Ordinary: registers tools/services, calls external domains. |
+| C2 | Powerful: prompt surface, API interception, subprocess, exec, credential reads or install scripts. |
+| C3 | Powerful capabilities combined with sensitive behavior. |
+
+This supplies a dimension neither the store nor the catalog has: of the store's
+6,896 plugins only 624 have a download number, and none carries capability
+data, while dsh-xray knows the capabilities but not who installs them.
+
+The report therefore gains two views:
+
+- `topByRisk` — ordered by capability risk, worst first (ties broken by downloads)
+- `highAdoptionAndHighRisk` — plugins that are **both widely installed and
+  sensitive**. This is the genuinely useful line: which widely-installed plugins
+  can do sensitive things. The threshold is not invented: it is **half the
+  median download count of the candidate pool**, and the number used is
+  reported alongside so a reader can re-judge where the line should sit.
+
+The governing rule: **ungraded is not safe**. A plugin with `level: null` lands
+in the `unknown` bucket and is never sorted onto the "harmless" side — the same
+principle as "no npm package is not zero downloads".
+
+In dsh-xray, `level: -1` is a **skipped** sentinel (measured: 349 records —
+324 `skipped: no scannable code`, 23 `skipped: download failed`, 2 scanner
+errors). Those were never graded, so they are also `unknown`, and the original
+`status` is preserved in `ungradedReason`.
+
+### Data volume and degradation
+
+Measured on 2026-10-26: `data.json` is **14,855,325 bytes**, **13.8 s** cold,
+~**1.5 s** warm over the GitHub CDN's gzip path; `JSON.parse` costs 145 ms /
+25.3 MB of heap, and ~**15 MB** stays resident after projection into a `Map`.
+
+The `capability` parameter selects the path:
+
+| Value | Behaviour |
+|---|---|
+| `auto` (default) | bulk snapshot first; on failure fall back to per-repository badge lookups |
+| `bulk` | bulk only; if it fails there is no capability data, and the report says so |
+| `badge` | skip the bulk file; query `badge/<owner>__<repo>.json` (~92 bytes, 300–700 ms each). **Level only, no flags**, and only for candidates that have a repository URL |
+| `off` | disable the dimension entirely |
+
+Every row produced by a degraded path carries `partial: true`, and
+`capabilitySource.used` states which path ran, so a level-only answer is never
+presented as if it were the full picture.
+
+**Three separate failure exits**, none of which silently becomes an empty array:
+
+- `requestFailures` — any request failure (including exhausted 429 backoff, timeouts)
+- `capabilityFailures` — failures specific to the capability join
+- `capabilitySource.reason` — why the whole dimension is unavailable
+  (`too-large` / `invalid-json` / `http-500` / …)
+
+A repository missing from dsh-xray is **data**
+(`note: "dsh-xray did not index this repository"`), reported separately from a
+transport failure — "I could not find out" and "it has none" are different facts.
 
 ## Output
 
@@ -139,9 +210,28 @@ plugin_adoption({ topN: 20 })                     # return the top 20
   "sampled": 12,               // candidates found
   "withPackage": 9,            // that have an npm package
   "withDownloads": 9,          // both numbers available, comparable
-  "topByDownloads": [
+  "topByDownloads": [          // each row now carries its capability
     { "name": "dsh-mnemon", "downloads": 50672, "stars": 701,
-      "starRank": 2, "downloadRank": 1 }
+      "starRank": 2, "downloadRank": 1,
+      "capability": { "level": 2, "bucket": "elevated",
+                      "sensitive": ["exec", "token_env"] } }
+  ],
+  "topByRisk": [               // second dimension: worst capability first
+    { "name": "dsh-x", "level": 3, "bucket": "high", "riskScore": 305,
+      "downloads": 45866, "sensitive": ["runtime_patch", "exec"],
+      "ungradedReason": null }
+  ],
+  "highAdoptionAndHighRisk": { // widely installed AND sensitive
+    "threshold": 14448,
+    "basis": "69 of the candidates have downloads; median 28897, halved",
+    "rows": [ /* same row shape */ ]
+  },
+  "capabilitySource": {        // how this dimension's data was obtained
+    "mode": "auto", "used": "bulk", "available": true,
+    "graded": 102, "ungraded": 1, "legend": { "0": "C0 …", "3": "C3 …" }
+  },
+  "dangerousCombos": [         // how often each combination occurs here
+    { "id": "exec+token_env", "ecosystemCount": 1135, "inCandidates": 5 }
   ],
   "underratedByStars": [       // shift > 0
     { "name": "dsh-mcp-panel", "stars": 89, "downloads": 10058,
@@ -149,7 +239,8 @@ plugin_adoption({ topN: 20 })                     # return the top 20
   ],
   "noPackage": ["owner/repo"], // no npm package; listed, never treated as 0
   "requestFailures": [],       // every request failure, never silent
-  "sources": { "catalog": "...", "npm": "...", "fetchedAt": "..." }
+  "capabilityFailures": [],    // capability-join failures, kept separate
+  "sources": { "catalog": "...", "npm": "...", "xray": "...", "fetchedAt": "..." }
 }
 ```
 
@@ -180,8 +271,9 @@ because the first reads as a finding.
 |---|---|
 | Plugin list, stars, install counts | `api.deepseek1024.com/v1/plugins/search` |
 | Monthly downloads | `api.npmjs.org/downloads/point/last-month/<pkg>` |
+| Capability level + flags | `unstone.github.io/dsh-xray/data.json` (bulk) or `.../badge/<owner>__<repo>.json` (degraded) |
 
-Both are public read-only endpoints. No authentication.
+All are public read-only endpoints. No authentication.
 
 ## Limitations
 
@@ -191,12 +283,23 @@ Both are public read-only endpoints. No authentication.
   The two time windows differ.
 - Downloads include CI, mirrors, and automated installs — not purely "humans using it".
 - Sampling depends on `queries`; it is not the full catalog.
+- **The capability grade is third-party static analysis, not a security rating.**
+  It answers "what can this plugin do", not "is it malicious". C0 is not proof
+  of harmlessness either — it only means no notable surface was detected, and
+  static scanning cannot see behaviour that only appears at run time.
+- The sensitive-flag subset (`SENSITIVE_FLAGS`) and the risk ordering weights are
+  **this plugin's judgement**, not dsh-xray's; only the C0–C3 grades are the
+  publisher's. The two are labelled separately in the code so you can disagree
+  with one without discarding the other.
+- The badge fallback yields **level only, no flags**, so `sensitive` is always
+  empty on that path — empty means "not fetched this time", not "no sensitive
+  capabilities".
 
 ## Development
 
 ```bash
 node --check index.js && node --check lib/adoption.mjs   # syntax
-node --test test/logic.test.mjs                          # offline logic tests
+node --test test/logic.test.mjs test/capability.test.mjs  # offline logic tests
 ```
 
 The tests are **offline on purpose**: running them against the live API would

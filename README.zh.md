@@ -4,19 +4,20 @@
 > English: [README.md](README.md).
 
 按**真实 npm 月下载量**给 DSH 插件排名，而不是按 GitHub 星数。
+同时带一个独立的第二维度：**能力面风险（C0–C3）**。
 
 [![DSH 1024Store](https://img.shields.io/badge/1024Store-catalogued-blue)](https://deepseek1024.com/)
 
 ## 它做什么、不做什么
 
-本插件**只读**两个公开数据源，并对读到的内容**排序**。它不写任何东西、不安装、
+本插件**只读**公开数据源，并对读到的内容**排序**。它不写任何东西、不安装、
 不修改、也不限制任何东西。
 
 | | |
 |---|---|
-| 读取 | 1024Store catalog 公开接口（只读）、npm 官方下载量接口（只读）|
+| 读取 | 1024Store catalog 公开接口（只读）、npm 官方下载量接口（只读）、dsh-xray 能力面快照（只读）|
 | 写入 | **无** —— 不写文件、不改配置、不改 registry 状态、不动其它插件 |
-| 网络 | 只发 GET，去两个公开接口和 npm registry |
+| 网络 | 只发 GET，去公开接口、npm registry 和 dsh-xray |
 | 注册 | 一个工具 `plugin_adoption`，自身不注册 HTTP 路由 |
 | 改动其它插件 | **从不**。它只报告排名，不执行排名 |
 
@@ -101,8 +102,67 @@ npm 搜索接口和 catalog 接口是两个不同的服务，所以**不占 cata
 plugin_adoption()                                    # 默认：dsh 关键词，12 个候选
 plugin_adoption({ queries: ['memory', 'tool'] })     # 多个搜索词取并集
 plugin_adoption({ limit: 30 })                       # 更多候选（会更慢，且消耗配额）
-plugin_adoption({ topN: 20 })                        # 返回前 20 名
+plugin_adoption({ topN: 20 })                        # 每个视角返回前 20 名
+plugin_adoption({ capability: 'badge' })             # 跳过 14.9MB 全量文件，只查 badge
+plugin_adoption({ capability: 'off' })               # 关掉能力面维度（旧版行为）
 ```
+
+## 第二维度：能力面风险
+
+星数和下载量都回答「有多少人用它」，都不回答 **「它装到你机器上之后能做什么」**。
+[dsh-xray](https://unstone.github.io/dsh-xray/) 公开扫描每个插件仓库的能力面，
+给出等级和具体能力 flags，本插件把它 join 进候选池。
+
+| 等级 | 含义（原文来自 dsh-xray 的图例）|
+|---|---|
+| C0 | 没有值得注意的能力面 |
+| C1 | 普通：注册工具/服务、访问外部域名 |
+| C2 | 强势：prompt 面、API 拦截、子进程、exec、读凭证或安装脚本 |
+| C3 | 强势能力与敏感行为的组合 |
+
+**这补的是站方和 catalog 都没有的维度**：站方 6,896 个插件里只有 624 个有下载量，
+而且没有能力面数据；dsh-xray 有能力面但不知道谁在装。
+
+报告因此多出两个视角：
+
+- `topByRisk` —— 按能力面风险排序（等级高的在前，同等级按下载量破平）
+- `highAdoptionAndHighRisk` —— **同时高下载量 且 高风险**的名单。这才是真正有用的那条：
+  哪些被大量安装的插件具备敏感能力。阈值不是拍脑袋定的，是**候选池里中位下载量的一半**，
+  并且把用的数字一起报出来，方便你重新判断这条线划得对不对。
+
+关键设计：**未分级 ≠ 安全**。`level` 为 `null` 的插件一律进 `unknown` bucket，
+不会被当成 C0 排到"安全"那一侧 —— 这和本插件「没有 npm 包不当成 0」是同一条原则。
+
+dsh-xray 里 `level: -1` 是「跳过扫描」的哨兵值（实测 349 条：`skipped: no scannable code`
+324 条、`skipped: download failed` 23 条、扫描器报错 2 条），它们是**没被扫过**，
+不是 C0，因此同样归 `unknown`，并把原始 `status` 记在 `ungradedReason` 里。
+
+### 数据量与降级
+
+实测（2026-10-26）：`data.json` **14,855,325 字节**，冷下载 **13.8 s**，
+走 GitHub CDN 的 gzip 热路径约 **1.5 s**；`JSON.parse` 145 ms / 25.3 MB 堆，
+投影成 `Map` 后常驻约 **15 MB**。
+
+`capability` 参数控制怎么取：
+
+| 值 | 行为 |
+|---|---|
+| `auto`（默认）| 先取全量快照，失败则降级为逐仓库 badge 查询 |
+| `bulk` | 只要全量；失败就没有能力面数据（并明确报告）|
+| `badge` | 跳过全量文件，只查 `badge/<owner>__<repo>.json`（每条约 92 字节 / 300–700 ms）。**只有 level，没有 flags**，且只覆盖有仓库地址的候选 |
+| `off` | 完全关闭该维度 |
+
+降级路径上的每一行都带 `partial: true`，报告也会说明用的是哪条路径（`capabilitySource.used`），
+不会让「只有等级没有 flags」的数据看起来跟全量一样。
+
+**三个独立的失败出口**，没有一个会静默变成空数组：
+
+- `requestFailures` —— 所有请求失败（含 429 退避耗尽、超时）
+- `capabilityFailures` —— 能力面 join 特有的失败
+- `capabilitySource.reason` —— 整个维度不可用时的原因（如 `too-large` / `invalid-json` / `http-500`）
+
+一个仓库不在 dsh-xray 里是**数据**（`note: "dsh-xray 未收录该仓库"`），
+跟传输失败分开报 —— 「查不到」和「它没有」是两件事。
 
 ## 输出
 
@@ -111,9 +171,28 @@ plugin_adoption({ topN: 20 })                        # 返回前 20 名
   "sampled": 12,              // 候选数
   "withPackage": 9,           // 有 npm 包的
   "withDownloads": 9,         // 两个数字都拿到、可比较的
-  "topByDownloads": [         // 按下载量排名
+  "topByDownloads": [         // 按下载量排名（每行现在带 capability）
     { "name": "dsh-mnemon", "downloads": 50672, "stars": 701,
-      "starRank": 2, "downloadRank": 1 }
+      "starRank": 2, "downloadRank": 1,
+      "capability": { "level": 2, "bucket": "elevated",
+                      "sensitive": ["exec", "token_env"] } }
+  ],
+  "topByRisk": [              // 第二维度：按能力面风险排序
+    { "name": "dsh-x", "level": 3, "bucket": "high", "riskScore": 305,
+      "downloads": 45866, "sensitive": ["runtime_patch", "exec"],
+      "ungradedReason": null }
+  ],
+  "highAdoptionAndHighRisk": { // 高下载量 ∩ 高风险
+    "threshold": 14448,
+    "basis": "候选池有下载量的 69 条，中位数 28897，取一半",
+    "rows": [ /* 同上结构 */ ]
+  },
+  "capabilitySource": {        // 这一维度的数据是怎么来的
+    "mode": "auto", "used": "bulk", "available": true,
+    "graded": 102, "ungraded": 1, "legend": { "0": "C0 …", "3": "C3 …" }
+  },
+  "dangerousCombos": [         // 危险组合在候选池里出现了几次
+    { "id": "exec+token_env", "ecosystemCount": 1135, "inCandidates": 5 }
   ],
   "underratedByStars": [      // 被星数低估的（shift > 0）
     { "name": "dsh-mcp-panel", "stars": 89, "downloads": 10058,
@@ -121,7 +200,8 @@ plugin_adoption({ topN: 20 })                        # 返回前 20 名
   ],
   "noPackage": ["owner/repo"],  // 没有 npm 包的，单列，不当成 0
   "requestFailures": [],        // 请求失败逐条列出，不静默
-  "sources": { "catalog": "...", "npm": "...", "fetchedAt": "..." }
+  "capabilityFailures": [],     // 能力面 join 的失败，单独一组
+  "sources": { "catalog": "...", "npm": "...", "xray": "...", "fetchedAt": "..." }
 }
 ```
 
@@ -148,8 +228,9 @@ plugin_adoption({ topN: 20 })                        # 返回前 20 名
 |---|---|
 | 插件列表、star、安装数 | `api.deepseek1024.com/v1/plugins/search` |
 | 月下载量 | `api.npmjs.org/downloads/point/last-month/<包名>` |
+| 能力面等级 + flags | `unstone.github.io/dsh-xray/data.json`（全量）或 `.../badge/<owner>__<repo>.json`（降级）|
 
-两个都是公开只读接口，无需鉴权。
+都是公开只读接口，无需鉴权。
 
 ## 局限
 
@@ -157,6 +238,13 @@ plugin_adoption({ topN: 20 })                        # 返回前 20 名
 - star 来自 catalog 快照，下载量是 npm 的当月口径，两者时间窗不同。
 - 下载量包含 CI、镜像、自动化安装，不完全等于"人在用"。
 - 采样取决于 `queries`，不是全量。
+- **能力面等级是第三方静态扫描结果，不是安全评级。** 它回答「这个插件能做什么」，
+  不回答「这个插件是否恶意」。C0 也不是"无害"的证明，只说明没扫到值得注意的能力面 ——
+  静态扫描看不见运行时才出现的行为。
+- 敏感 flag 子集（`SENSITIVE_FLAGS`）和风险排序权重是**本插件的判断**，不是 dsh-xray 的；
+  等级本身（C0–C3）才是发布方的口径。两者在代码里分开标注，方便你不同意某一条。
+- badge 降级路径只给等级，**没有 flags**，所以那条路上 `sensitive` 恒为空 ——
+  空并非"没有敏感能力"，是"这次没拿到"。
 
 ## 相关
 
