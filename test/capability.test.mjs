@@ -431,11 +431,16 @@ test('LEVEL_LEGEND covers every grade and does not invent one', () => {
 
 
 // ─────────────────────── loadXray failure policy ───────────────────────
+// The loader memoises a successful bulk index for the process lifetime, so
+// every test below starts from a cleared cache. Without this the tests would
+// only pass in one execution order — the kind of fragility that turns a green
+// suite into a lie the first time somebody adds a test above these.
 
 test('loadXray reports unavailable instead of an empty index', async () => {
   // Point the loader at a URL that cannot resolve, and assert the failure
   // policy: available=false, a reason, a failure recorded — never a Map that
   // reads as "this ecosystem has no plugins".
+  clearXrayCache()
   const failures = []
   const original = globalThis.fetch
   globalThis.fetch = async () => { throw Object.assign(new Error('nope'), { name: 'TypeError' }) }
@@ -447,10 +452,12 @@ test('loadXray reports unavailable instead of an empty index', async () => {
     assert.ok(failures.length > 0, 'a transport failure must land in requestFailures')
   } finally {
     globalThis.fetch = original
+    clearXrayCache()
   }
 })
 
 test('loadXray rejects a body that is not JSON rather than pretending it parsed', async () => {
+  clearXrayCache()
   const failures = []
   const original = globalThis.fetch
   globalThis.fetch = async () => new Response('<html>rate limited</html>', {
@@ -463,10 +470,12 @@ test('loadXray rejects a body that is not JSON rather than pretending it parsed'
     assert.ok(failures.some(f => f.includes('not valid JSON')))
   } finally {
     globalThis.fetch = original
+    clearXrayCache()
   }
 })
 
 test('loadXray enforces the size ceiling before buffering', async () => {
+  clearXrayCache()
   const failures = []
   const original = globalThis.fetch
   globalThis.fetch = async () => new Response('x'.repeat(200), {
@@ -479,10 +488,12 @@ test('loadXray enforces the size ceiling before buffering', async () => {
     assert.ok(failures.some(f => f.includes('exceeds')))
   } finally {
     globalThis.fetch = original
+    clearXrayCache()
   }
 })
 
 test('loadXray indexes a valid document and reports its provenance', async () => {
+  clearXrayCache()
   const failures = []
   const doc = { generated_at: '2026-10-25T08:00:07+00:00', scanned: 21452, total: 21801, plugins: [REAL_C3] }
   const original = globalThis.fetch
@@ -497,6 +508,7 @@ test('loadXray indexes a valid document and reports its provenance', async () =>
     assert.equal(failures.length, 0)
   } finally {
     globalThis.fetch = original
+    clearXrayCache()
   }
 })
 
@@ -504,20 +516,52 @@ test('XRAY_DATA_URL is the published capability file', () => {
   assert.equal(XRAY_DATA_URL, 'https://unstone.github.io/dsh-xray/data.json')
 })
 
-test('the bulk index is fetched once and then reused', async () => {
-  // The bulk file is 14 MB. A second question must not re-download it, or the
-  // publisher's Pages sees one download per question. A failed load must NOT
-  // be cached, though: the next call should try again rather than inherit a
-  // failure for the rest of the session.
+test('a successful bulk load is reused, so a second question costs no download', async () => {
+  // The bulk file is 14 MB; a second tool call must not re-fetch it.
   clearXrayCache()
-  const failures = []
-  const first = await loadXray({ failures, maxBytes: 1024 })
-  assert.equal(first.available, false)
-  assert.ok(failures.length > 0, 'a failed load must be reported')
+  const doc = { generated_at: '2026-10-25T08:00:07+00:00', scanned: 21452, total: 21801, plugins: [REAL_C3] }
+  const original = globalThis.fetch
+  let calls = 0
+  globalThis.fetch = async () => {
+    calls += 1
+    return new Response(JSON.stringify(doc), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    })
+  }
+  try {
+    const first = await loadXray({ failures: [] })
+    const second = await loadXray({ failures: [] })
+    assert.equal(calls, 1, 'the second load must come from the cache, not the network')
+    assert.equal(first.available, true)
+    assert.equal(second.available, true)
+    assert.equal(second.byRepo.get('nexu-io/open-design').level, 3)
+    // Cached entries carry the snapshot date, so a stale grade is always
+    // attributable to a specific daily scan.
+    assert.equal(second.generatedAt, '2026-10-25T08:00:07+00:00')
+  } finally {
+    globalThis.fetch = original
+    clearXrayCache()
+  }
+})
 
+test('a failed bulk load is not cached, so the next call retries', async () => {
+  // Caching a failure would poison the rest of the session: one flaky moment
+  // and every later question would report "no capability data" without trying.
   clearXrayCache()
-  const failures2 = []
-  const second = await loadXray({ failures: failures2, maxBytes: 1024 })
-  assert.equal(second.available, false)
-  assert.ok(failures2.length > 0, 'a failed load must be reported again')
+  const original = globalThis.fetch
+  let calls = 0
+  globalThis.fetch = async () => {
+    calls += 1
+    throw Object.assign(new Error('flaky'), { name: 'TypeError' })
+  }
+  try {
+    const first = await loadXray({ failures: [] })
+    const second = await loadXray({ failures: [] })
+    assert.equal(first.available, false)
+    assert.equal(second.available, false)
+    assert.equal(calls, 2, 'the failed load must not have been cached')
+  } finally {
+    globalThis.fetch = original
+    clearXrayCache()
+  }
 })
